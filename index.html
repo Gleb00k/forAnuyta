@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title></title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #050408;
+    font-family: 'Georgia', serif;
+    cursor: grab;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+  body:active { cursor: grabbing; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .wish {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.85);
+    width: 90%;
+    max-width: 560px;
+    padding: 30px 20px;
+    background: rgba(25, 10, 15, 0.85); 
+    border: 1px solid rgba(255, 150, 150, 0.4);
+    border-radius: 18px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    color: #ffe6e6;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    z-index: 20;
+    box-shadow: 0 0 60px rgba(255, 80, 80, 0.3), inset 0 0 30px rgba(255, 120, 120, 0.1);
+  }
+  .wish.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    pointer-events: auto;
+  }
+  .wish .num {
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: rgba(255, 180, 180, 0.8);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .wish .text {
+    font-size: clamp(18px, 5vw, 28px);
+    line-height: 1.45;
+    letter-spacing: 1px;
+    text-shadow: 0 0 24px rgba(255, 100, 100, 0.8);
+  }
+  .wish .close {
+    margin-top: 22px;
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: rgba(255, 200, 200, 0.6);
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 10px;
+    transition: color 0.3s;
+  }
+  .wish .close:hover { color: #fff; }
+</style>
+</head>
+<body>
+<canvas id="galaxy"></canvas>
+
+<div class="wish" id="wishCard">
+  <div class="num" id="wishNum"></div>
+  <div class="text" id="wishText"></div>
+  <div class="close" id="wishClose">Закрыть ✕</div>
+</div>
+
+<script>
+const PHRASES = [
+  'Я люблю тебя Анюта',
+  'Ты самое ценное, что у меня есть',
+  'Ты делаешь меня счастливым',
+  'Ты повод улыбаться чаще',
+  'Горжусь тобой больше всего'
+];
+
+const WISHES = [
+  { num: 1,  text: 'Анюта, ты моя самая яркая звездочка, и я готов любоваться тобою вечность.' },
+  { num: 2,  text: 'Каждый день рядом с тобой это огромное счастье.' },
+  { num: 3,  text: 'Ты самое лучшее, что случилось в моей жизни.' },
+  { num: 4,  text: 'Твоя улыбка это самое теплое и приятное действие, которое согревает мое сердце.' },
+  { num: 5,  text: 'Я горжусь тобой, ты у меня самая лучшая Анюта.' },
+  { num: 6,  text: 'Без тебя всегда грустно и одиноко, когда ты рядом жизнь становится намного намного лучше.' },
+  { num: 7,  text: 'Ты мой повод улыбаться каждый день.' },
+  { num: 8,  text: 'Я люблю тебя сильно сильно малыш, ты для меня весь мир' },
+  { num: 9,  text: 'Несмотря ни на что я каждый день просыпаюсь с мыслью о тебе.' },
+  { num: 10, text: 'Анюта, ты самое ценное что у меня есть, я люблю тебя.' },
+];
+
+const canvas = document.getElementById('galaxy');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+let W, H, CX, CY, DPR = Math.min(window.devicePixelRatio || 1, 2);
+function resize() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  CX = W / 2;
+  CY = H / 2;
+}
+resize();
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+
+function pickPhrase() {
+  if (Math.random() < 0.5) return PHRASES[0];
+  return PHRASES[(Math.random() * PHRASES.length) | 0];
+}
+
+const NUM_WORDS = 2500; 
+const GALAXY_RADIUS = 2000; 
+const ARMS = 2; 
+const points = [];
+
+for (let i = 0; i < NUM_WORDS; i++) {
+  const t = Math.pow(Math.random(), 0.8); 
+  const radius = 100 + t * GALAXY_RADIUS;
+
+  const armIndex = i % ARMS;
+  const armOffset = (armIndex / ARMS) * Math.PI * 2;
+  
+  const angle = armOffset + (radius / GALAXY_RADIUS) * 6.0 * Math.PI;
+  
+  const jitterAngle = angle + (Math.random() - 0.5) * 0.25;
+  const jitterRadius = radius + (Math.random() - 0.5) * 100;
+  
+  const y = (Math.random() - 0.5) * (40 + 60 * t);
+
+  const x = Math.cos(jitterAngle) * jitterRadius;
+  const z = Math.sin(jitterAngle) * jitterRadius;
+
+  const hue = 10 - t * 40; 
+  const light = 85 - t * 25; 
+  const sat = 80 + t * 20;
+
+  points.push({
+    x, y, z,
+    ox: x, oy: y, oz: z,
+    color: `hsl(${hue}, ${sat}%, ${light}%)`,
+    size: 9,
+    phase: Math.random() * Math.PI * 2,
+    text: pickPhrase(),
+    isCore: false
+  });
+}
+
+for (let i = 0; i < 500; i++) {
+  const r = Math.pow(Math.random(), 0.5) * 200;
+  const a = Math.random() * Math.PI * 2;
+  const y = (Math.random() - 0.5) * 30;
+  const x = Math.cos(a) * r;
+  const z = Math.sin(a) * r;
+
+  points.push({
+    x, y, z,
+    ox: x, oy: y, oz: z,
+    color: `hsl(45, 100%, ${90 + Math.random() * 10}%)`, 
+    size: 9, 
+    phase: Math.random() * Math.PI * 2,
+    text: pickPhrase(),
+    isCore: true
+  });
+}
+
+for (let i = 0; i < 300; i++) {
+  const r = Math.pow(Math.random(), 0.5) * GALAXY_RADIUS * 1.5;
+  const a = Math.random() * Math.PI * 2;
+  const y = (Math.random() - 0.5) * 400;
+  const x = Math.cos(a) * r;
+  const z = Math.sin(a) * r;
+
+  points.push({
+    x, y, z,
+    ox: x, oy: y, oz: z,
+    color: `hsl(${350 + Math.random() * 20}, 70%, 50%)`,
+    size: 9, 
+    phase: Math.random() * Math.PI * 2,
+    text: pickPhrase(),
+    isCore: false
+  });
+}
+
+const wishPoints = [];
+for (let i = 0; i < 10; i++) {
+  const t = 0.4 + (i / 10) * 0.5;
+  const radius = 200 + t * GALAXY_RADIUS * 0.7;
+  const armIndex = i % ARMS;
+  const armOffset = (armIndex / ARMS) * Math.PI * 2;
+  const angle = armOffset + (radius / GALAXY_RADIUS) * 6.0 * Math.PI;
+  
+  const x = Math.cos(angle) * radius;
+  const z = Math.sin(angle) * radius;
+  const y = 0;
+
+  wishPoints.push({
+    index: i,
+    x, y, z,
+    ox: x, oy: y, oz: z,
+    color: `hsl(180, 100%, 70%)`, 
+    phase: Math.random() * Math.PI * 2,
+    screenX: 0, screenY: 0, visible: false, scale: 0, depth: 0
+  });
+}
+
+const camera = {
+  rotX: -0.9, 
+  rotY: 0,
+  targetRotX: -0.9,
+  targetRotY: 0,
+  zoom: 1,
+  targetZoom: 1,
+  focusX: 0, focusY: 0, focusZ: 0,
+  targetFocusX: 0, targetFocusY: 0, targetFocusZ: 0,
+};
+
+let dragging = false;
+let lastPointerX = 0, lastPointerY = 0;
+let pointerDownTime = 0;
+let pointerDownX = 0, pointerDownY = 0;
+let activeWishIndex = -1;
+let autoRotate = true;
+let lastInteraction = performance.now();
+
+let velocityX = 0;
+let velocityY = 0;
+
+function onPointerDown(e) {
+  const x = e.clientX ?? e.touches[0].clientX;
+  const y = e.clientY ?? e.touches[0].clientY;
+  dragging = true;
+  autoRotate = false;
+  lastPointerX = x;
+  lastPointerY = y;
+  pointerDownX = x;
+  pointerDownY = y;
+  pointerDownTime = performance.now();
+  lastInteraction = performance.now();
+  velocityX = 0;
+  velocityY = 0;
+}
+
+function onPointerMove(e) {
+  if (!dragging) return;
+  const x = e.clientX ?? e.touches[0].clientX;
+  const y = e.clientY ?? e.touches[0].clientY;
+  const dx = x - lastPointerX;
+  const dy = y - lastPointerY;
+  lastPointerX = x;
+  lastPointerY = y;
+
+  camera.targetRotY += dx * 0.005;
+  camera.targetRotX += dy * 0.005;
+  
+  velocityY = dx * 0.005;
+  velocityX = dy * 0.005;
+  lastInteraction = performance.now();
+}
+
+function onPointerUp() {
+  if (!dragging) return;
+  dragging = false;
+  lastInteraction = performance.now();
+
+  const dt = performance.now() - pointerDownTime;
+  const dx = (lastPointerX - pointerDownX);
+  const dy = (lastPointerY - pointerDownY);
+  const dist = Math.hypot(dx, dy);
+
+  if (dt < 300 && dist < 10) {
+    tryClickWish(lastPointerX, lastPointerY);
+    velocityX = 0;
+    velocityY = 0;
+  }
+}
+
+window.addEventListener('wheel', (e) => {
+  if (activeWishIndex !== -1) return;
+  e.preventDefault();
+  const zoomSpeed = 0.0015;
+  camera.targetZoom -= e.deltaY * zoomSpeed;
+  camera.targetZoom = Math.max(0.5, Math.min(8.0, camera.targetZoom));
+  lastInteraction = performance.now();
+}, { passive: false });
+
+let initialPinchDist = 0;
+let initialPinchZoom = 1;
+
+window.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    dragging = false;
+    initialPinchDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    initialPinchZoom = camera.targetZoom;
+  }
+}, { passive: true });
+
+window.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const currentDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    if (initialPinchDist > 0) {
+      const ratio = currentDist / initialPinchDist;
+      camera.targetZoom = initialPinchZoom * ratio;
+      camera.targetZoom = Math.max(0.5, Math.min(8.0, camera.targetZoom));
+    }
+  }
+}, { passive: false });
+
+window.addEventListener('touchend', () => { initialPinchDist = 0; });
+
+canvas.addEventListener('mousedown', onPointerDown);
+window.addEventListener('mousemove', onPointerMove);
+window.addEventListener('mouseup', onPointerUp);
+canvas.addEventListener('touchstart', onPointerDown, { passive: true });
+
+function tryClickWish(sx, sy) {
+  let best = -1;
+  let bestDist = 50;
+
+  for (const wp of wishPoints) {
+    if (!wp.visible) continue;
+    const d = Math.hypot(wp.screenX - sx, wp.screenY - sy);
+    if (d < bestDist) {
+      bestDist = d;
+      best = wp.index;
+    }
+  }
+
+  if (best >= 0) {
+    openWish(best);
+  }
+}
+
+function openWish(index) {
+  activeWishIndex = index;
+  const wp = wishPoints[index];
+
+  camera.targetFocusX = wp.ox;
+  camera.targetFocusY = wp.oy;
+  camera.targetFocusZ = wp.oz;
+  camera.targetZoom = 4.0;
+
+  document.getElementById('wishNum').textContent = `Пожелание ${WISHES[index].num}`;
+  document.getElementById('wishText').textContent = WISHES[index].text;
+  document.getElementById('wishCard').classList.add('show');
+}
+
+function closeWish() {
+  activeWishIndex = -1;
+  document.getElementById('wishCard').classList.remove('show');
+  
+  camera.targetFocusX = 0;
+  camera.targetFocusY = 0;
+  camera.targetFocusZ = 0;
+  camera.targetZoom = 1;
+  lastInteraction = performance.now();
+}
+
+document.getElementById('wishClose').addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeWish();
+});
+
+const FOV = 900;
+
+function project(x, y, z, camRotX, camRotY, zoom) {
+  let px = (x - camera.focusX) * zoom;
+  let py = (y - camera.focusY) * zoom;
+  let pz = (z - camera.focusZ) * zoom;
+
+  const cosY = Math.cos(camRotY), sinY = Math.sin(camRotY);
+  let x1 = px * cosY - pz * sinY;
+  let z1 = px * sinY + pz * cosY;
+
+  const cosX = Math.cos(camRotX), sinX = Math.sin(camRotX);
+  let y1 = py * cosX - z1 * sinX;
+  let z2 = py * sinX + z1 * cosX;
+
+  const camZ = z2 + 4000; 
+  if (camZ <= 1) return null;
+
+  const scale = FOV / camZ;
+  return {
+    sx: CX + x1 * scale,
+    sy: CY + y1 * scale,
+    scale,
+    depth: camZ
+  };
+}
+
+function damp(current, target, lambda, dt) {
+  return current + (target - current) * (1 - Math.exp(-lambda * dt));
+}
+
+let lastTime = performance.now();
+let time = 0;
+
+function render(now) {
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+  time += dt;
+
+  if (!dragging && now - lastInteraction > 4000 && activeWishIndex === -1) {
+    autoRotate = true;
+  }
+
+  const lambda = 6.0;
+  camera.rotX = damp(camera.rotX, camera.targetRotX, lambda, dt);
+  camera.rotY = damp(camera.rotY, camera.targetRotY, lambda, dt);
+  camera.zoom = damp(camera.zoom, camera.targetZoom, 4.0, dt);
+  camera.focusX = damp(camera.focusX, camera.targetFocusX, 3.0, dt);
+  camera.focusY = damp(camera.focusY, camera.targetFocusY, 3.0, dt);
+  camera.focusZ = damp(camera.focusZ, camera.targetFocusZ, 3.0, dt);
+
+  if (autoRotate) {
+    camera.targetRotY += dt * 0.05;
+    camera.targetRotX += Math.sin(time * 0.3) * dt * 0.01;
+  }
+
+  if (!dragging && activeWishIndex === -1) {
+    camera.targetRotY += velocityY;
+    camera.targetRotX += velocityX;
+    velocityY *= 0.95;
+    velocityX *= 0.95;
+    
+    if (Math.abs(velocityY) < 0.0001) velocityY = 0;
+    if (Math.abs(velocityX) < 0.0001) velocityX = 0;
+  }
+
+  ctx.fillStyle = '#0a0505';
+  ctx.fillRect(0, 0, W, H);
+
+  const breathe = 1 + Math.sin(time * 1.5) * 0.01;
+
+  const drawList = [];
+
+  for (const p of points) {
+    const pr = project(p.ox * breathe, p.oy * breathe, p.oz * breathe, camera.rotX, camera.rotY, camera.zoom);
+    if (pr) drawList.push({ type: 'word', pr, p });
+  }
+
+  for (const wp of wishPoints) {
+    const pr = project(wp.ox * breathe, wp.oy * breathe, wp.oz * breathe, camera.rotX, camera.rotY, camera.zoom);
+    if (pr) {
+      wp.screenX = pr.sx;
+      wp.screenY = pr.sy;
+      wp.scale = pr.scale;
+      wp.depth = pr.depth;
+      wp.visible = pr.depth > 100 && pr.depth < 6000;
+      drawList.push({ type: 'wish', pr, wp });
+    } else {
+      wp.visible = false;
+    }
+  }
+
+  drawList.sort((a, b) => b.pr.depth - a.pr.depth);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  for (const item of drawList) {
+    if (item.type === 'word') {
+      const { pr, p } = item;
+      const alpha = Math.min(1, Math.min(1, 6000 / pr.depth));
+      
+      const fontSize = Math.max(4, p.size * pr.scale * 1.5);
+
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.shadowBlur = 0; 
+
+      ctx.font = `bold ${fontSize}px Georgia, serif`;
+      ctx.fillText(p.text, pr.sx, pr.sy);
+    } else {
+      const { pr, wp } = item;
+      const pulse = 0.5 + 0.5 * Math.sin(time * 4 + wp.phase);
+      const isActive = activeWishIndex === wp.index;
+      
+      const baseR = (10 + pulse * 12) * pr.scale * (isActive ? 1.5 : 1);
+      
+      ctx.shadowBlur = 0;
+      
+      const grad = ctx.createRadialGradient(pr.sx, pr.sy, 0, pr.sx, pr.sy, baseR * 4);
+      grad.addColorStop(0, `rgba(100, 255, 255, ${0.6 + pulse * 0.4})`);
+      grad.addColorStop(0.3, `rgba(50, 200, 200, ${0.3 + pulse * 0.3})`);
+      grad.addColorStop(1, 'rgba(0, 150, 150, 0)');
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(pr.sx, pr.sy, baseR * 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(pr.sx, pr.sy, Math.max(2, baseR * 0.6), 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = `rgba(100, 255, 255, ${0.5 + pulse * 0.5})`;
+      ctx.lineWidth = Math.max(1, pr.scale * 1.5);
+      ctx.beginPath();
+      ctx.arc(pr.sx, pr.sy, baseR * 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  requestAnimationFrame(render);
+}
+
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
